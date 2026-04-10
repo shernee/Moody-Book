@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>StoryScore 📖🎵</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Georgia', serif;
+      background: #fdf6ec;
+      color: #3a2e1e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      background: #5c3d2e;
+      color: #fdf6ec;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.4rem; font-weight: normal; }
+    header span { font-size: 1.6rem; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      width: 100%;
+      max-width: 700px;
+      margin-top: 24px;
+      border-bottom: 2px solid #c9a97a;
+    }
+    .tab {
+      padding: 10px 24px;
+      cursor: pointer;
+      border-radius: 8px 8px 0 0;
+      font-size: 0.95rem;
+      color: #7a5c3a;
+      background: transparent;
+      border: none;
+    }
+    .tab.active {
+      background: #fdf6ec;
+      color: #3a2e1e;
+      font-weight: bold;
+      border: 2px solid #c9a97a;
+      border-bottom: 2px solid #fdf6ec;
+      margin-bottom: -2px;
+    }
+
+    /* ── Panels ── */
+    .panel { display: none; width: 100%; max-width: 700px; padding: 24px 16px; }
+    .panel.active { display: block; }
+
+    /* ── Setup panel ── */
+    .field label {
+      display: block;
+      font-size: 0.85rem;
+      color: #7a5c3a;
+      margin-bottom: 6px;
+      font-family: sans-serif;
+    }
+    .field input[type=text] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #c9a97a;
+      border-radius: 8px;
+      background: #fffdf8;
+      font-size: 1rem;
+      font-family: 'Georgia', serif;
+      color: #3a2e1e;
+      margin-bottom: 16px;
+    }
+    .field input:focus { outline: none; border-color: #8b5e3c; }
+
+    .pages-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .page-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .page-label {
+      font-size: 0.8rem;
+      color: #a07850;
+      font-family: sans-serif;
+      padding-top: 10px;
+      min-width: 52px;
+    }
+    .page-row textarea {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1.5px solid #ddc9a8;
+      border-radius: 8px;
+      background: #fffdf8;
+      font-family: 'Georgia', serif;
+      font-size: 0.9rem;
+      color: #3a2e1e;
+      resize: vertical;
+      min-height: 60px;
+    }
+    .page-row textarea:focus { outline: none; border-color: #8b5e3c; }
+    .page-row button.remove {
+      background: none;
+      border: none;
+      color: #c9a97a;
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 8px 4px;
+    }
+    .page-row button.remove:hover { color: #8b3a2e; }
+
+    .btn { 
+      padding: 10px 20px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: sans-serif;
+      font-size: 0.95rem;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid #c9a97a;
+      color: #7a5c3a;
+      margin-right: 8px;
+    }
+    .btn-primary { background: #5c3d2e; color: #fdf6ec; }
+    .btn-success { background: #3a6b3a; color: #fff; }
+    .btn-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+    .status-box {
+      margin-top: 16px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-family: sans-serif;
+      font-size: 0.9rem;
+      display: none;
+    }
+    .status-box.info { background: #eaf0fb; color: #2c4a8a; }
+    .status-box.success { background: #e8f5e8; color: #2a6a2a; }
+    .status-box.error { background: #fbe8e8; color: #8a2c2c; }
+
+    /* ── Reader panel ── */
+    .reader-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .book-title {
+      font-size: 1.3rem;
+      color: #5c3d2e;
+    }
+    .page-counter {
+      font-family: sans-serif;
+      font-size: 0.85rem;
+      color: #a07850;
+    }
+
+    .page-text {
+      background: #fffdf8;
+      border: 1.5px solid #ddc9a8;
+      border-radius: 12px;
+      padding: 28px 32px;
+      font-size: 1.15rem;
+      line-height: 1.8;
+      min-height: 140px;
+      color: #3a2e1e;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .mood-tag {
+      display: inline-block;
+      background: #f0e0c8;
+      color: #7a5c3a;
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 0.8rem;
+      font-family: sans-serif;
+      margin-bottom: 20px;
+    }
+
+    .music-bar {
+      background: #f5ede0;
+      border-radius: 12px;
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .music-icon { font-size: 1.4rem; }
+    .music-info { flex: 1; font-family: sans-serif; }
+    .music-info .track-name { font-size: 0.85rem; color: #5c3d2e; font-weight: bold; }
+    .music-info .track-desc { font-size: 0.75rem; color: #a07850; margin-top: 2px; }
+    .music-status {
+      font-size: 0.75rem;
+      font-family: sans-serif;
+      color: #a07850;
+      padding: 4px 10px;
+      background: #ede0cc;
+      border-radius: 12px;
+    }
+    .music-status.playing { color: #3a6b3a; background: #d8f0d8; }
+    .music-toggle {
+      background: none;
+      border: 1.5px solid #c9a97a;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      font-size: 1rem;
+      cursor: pointer;
+      color: #5c3d2e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .music-toggle:hover { background: #ede0cc; }
+
+    .nav-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .nav-btn {
+      padding: 12px 28px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-family: sans-serif;
+    }
+    .nav-btn.prev { background: #e8d8c4; color: #5c3d2e; }
+    .nav-btn.next { background: #5c3d2e; color: #fdf6ec; }
+    .nav-btn:disabled { opacity: 0.35; cursor: default; }
+
+    .timer-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 16px;
+      font-family: sans-serif;
+      font-size: 0.85rem;
+      color: #a07850;
+    }
+    .timer-row select {
+      padding: 4px 8px;
+      border: 1.5px solid #c9a97a;
+      border-radius: 6px;
+      background: #fffdf8;
+      color: #3a2e1e;
+      font-size: 0.85rem;
+    }
+    .timer-progress {
+      flex: 1;
+      height: 4px;
+      background: #ddc9a8;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .timer-fill {
+      height: 100%;
+      background: #5c3d2e;
+      width: 0%;
+      transition: width 1s linear;
+    }
+
+    audio { display: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>📖</span>
+  <h1>StoryScore — Musical Picture Book Player</h1>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="showTab('setup')">📝 Setup</button>
+  <button class="tab" onclick="showTab('reader')" id="readerTab">📖 Read</button>
+</div>
+
+<!-- ── SETUP PANEL ── -->
+<div class="panel active" id="setupPanel">
+
+  <div class="field" style="margin-top:8px">
+    <label>Book Title</label>
+    <input type="text" id="bookTitle" placeholder="e.g. The Tale of Peter Rabbit" />
+  </div>
+
+  <div class="field">
+    <label>Pages — paste each page's text below (one per box)</label>
+    <div class="pages-container" id="pagesContainer"></div>
+    <button class="btn btn-outline" onclick="addPage()">+ Add Page</button>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-outline" onclick="loadPeterRabbit()">📚 Peter Rabbit (demo)</button>
+    <button class="btn btn-outline" onclick="loadFromHeadToToe()">📚 From Head to Toe (demo)</button>
+    <button class="btn btn-primary" onclick="analyseBook()">🔍 Analyse Book</button>
+  </div>
+
+  <div class="status-box" id="statusBox"></div>
+
+  <div id="generateSection" style="display:none; margin-top:20px;">
+    <div style="font-family:sans-serif; font-size:0.85rem; color:#7a5c3a; margin-bottom:10px;">
+      Analysis complete. Ready to generate audio.
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-success" onclick="generateAudio()">🎵 Generate Audio</button>
+      <button class="btn btn-outline" onclick="openReader()">▶ Read (no audio yet)</button>
+    </div>
+    <div class="status-box" id="genStatusBox"></div>
+  </div>
+
+</div>
+
+<!-- ── READER PANEL ── -->
+<div class="panel" id="readerPanel">
+
+  <div class="reader-header">
+    <div class="book-title" id="readerTitle">—</div>
+    <div class="page-counter" id="pageCounter">Page 1 of ?</div>
+  </div>
+
+  <div class="page-text" id="pageText">Load a book to begin reading.</div>
+  <div style="text-align:center"><span class="mood-tag" id="moodTag">—</span></div>
+
+  <div class="music-bar" style="margin-top:16px;">
+    <span class="music-icon">🎵</span>
+    <div class="music-info">
+      <div class="track-name" id="trackName">No audio loaded</div>
+      <div class="track-desc" id="trackDesc">—</div>
+    </div>
+    <button class="music-toggle" id="musicToggle" onclick="toggleMusic()" title="Play / Pause">▶</button>
+    <span class="music-status" id="musicStatus">–</span>
+  </div>
+
+  <audio id="audioPlayer" loop></audio>
+
+  <div class="nav-row">
+    <button class="nav-btn prev" id="prevBtn" onclick="goPage(-1)">← Prev</button>
+    <button class="nav-btn prev" onclick="restartBook()" title="Back to page 1">↩ Restart</button>
+    <button class="nav-btn next" id="nextBtn" onclick="goPage(1)">Next →</button>
+  </div>
+
+  <div class="timer-row">
+    <label>Auto-advance:</label>
+    <select id="timerSelect" onchange="resetTimer()">
+      <option value="0">Off</option>
+      <option value="20">20s</option>
+      <option value="30" selected>30s</option>
+      <option value="45">45s</option>
+      <option value="60">60s</option>
+    </select>
+    <div class="timer-progress"><div class="timer-fill" id="timerFill"></div></div>
+  </div>
+
+</div>
+
+<script>
+const API = "";
+
+// ── State ──────────────────────────────────────────────────────────────────
+let bookData = null;   // full API response
+let currentPage = 0;
+let timerInterval = null;
+let timerSeconds = 0;
+let timerMax = 30;
+
+// ── Tab switching ──────────────────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(name + 'Panel').classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ── Page inputs ────────────────────────────────────────────────────────────
+function addPage(text = "") {
+  const container = document.getElementById('pagesContainer');
+  const idx = container.children.length + 1;
+  const row = document.createElement('div');
+  row.className = 'page-row';
+  row.innerHTML = `
+    <span class="page-label">Page ${idx}</span>
+    <textarea placeholder="Paste page text here...">${text}</textarea>
+    <button class="remove" onclick="this.parentElement.remove(); renumberPages()">✕</button>
+  `;
+  container.appendChild(row);
+}
+
+function renumberPages() {
+  document.querySelectorAll('.page-label').forEach((el, i) => {
+    el.textContent = `Page ${i + 1}`;
+  });
+}
+
+function getPages() {
+  return [...document.querySelectorAll('#pagesContainer textarea')]
+    .map(t => t.value.trim())
+    .filter(Boolean);
+}
+
+// ── Status helpers ─────────────────────────────────────────────────────────
+function showStatus(id, msg, type) {
+  const box = document.getElementById(id);
+  box.textContent = msg;
+  box.className = `status-box ${type}`;
+  box.style.display = 'block';
+}
+
+// ── Demo loader ────────────────────────────────────────────────────────────
+const PETER_RABBIT_PAGES = [
+  "Once upon a time there were four little Rabbits, and their names were Flopsy, Mopsy, Cotton-tail, and Peter.",
+  "They lived with their Mother in a sand-bank, underneath the root of a very big fir tree.",
+  "'Now my dears,' said old Mrs. Rabbit one morning, 'you may go into the fields or down the lane, but don't go into Mr. McGregor's garden!'",
+  "Flopsy, Mopsy, and Cotton-tail, who were good little bunnies, went down the lane to gather blackberries.",
+  "But Peter, who was very naughty, ran straight away to Mr. McGregor's garden and squeezed under the gate!",
+  "First he ate some lettuces and some French beans; and then he ate some radishes. Feeling rather sick, he went to look for some parsley.",
+  "But round the end of a cucumber frame, whom should he meet but Mr. McGregor! He was on his hands and knees planting out young cabbages.",
+  "'Stop thief!' Mr. McGregor called out, and he jumped up and ran after Peter, waving a rake!",
+  "Peter was most dreadfully frightened; he rushed all over the garden, for he had forgotten the way back to the gate.",
+  "He lost one of his shoes among the cabbages, and the other amongst the potatoes. After losing them, he ran on four legs and went faster.",
+  "Peter gave himself up for lost, and shed big tears; but his sobs were overheard by some friendly sparrows.",
+  "Peter found a door in a wall; but it was locked, and there was no room for a fat little rabbit to squeeze underneath.",
+  "Peter suddenly came upon a white cat, who was staring at some gold-fish; he decided it was safest to go away without speaking.",
+  "Mr. McGregor came round the corner of a tool-shed and nearly stepped on Peter. Peter jumped into a watering-can and hid.",
+  "Peter sat down to rest; he was out of breath and trembling with fright, but Mr. McGregor had gone back to his work.",
+  "Peter found the gate at last! He slipped underneath and was safe at last in the wood outside the garden.",
+  "Peter never stopped running till he got home to the big fir tree. He was so tired that he flopped down on the soft sand.",
+  "His mother put him to bed and made some chamomile tea. But Flopsy, Mopsy, and Cotton-tail had bread and milk and blackberries for supper.",
+];
+
+const FROM_HEAD_TO_TOE_PAGES = [
+  "I am a penguin and I turn my head. Can you do it? I can do it!",
+  "I am a giraffe and I bend my neck. Can you do it? I can do it!",
+  "I am a buffalo and I raise my shoulders. Can you do it? I can do it!",
+  "I am a monkey and I wave my arms. Can you do it? I can do it!",
+  "I am a seal and I clap my hands. Can you do it? I can do it!",
+  "I am a gorilla and I thump my chest. Can you do it? I can do it!",
+  "I am a cat and I arch my back. Can you do it? I can do it!",
+  "I am a crocodile and I wriggle my hips. Can you do it? I can do it!",
+  "I am a camel and I bend my knees. Can you do it? I can do it!",
+  "I am a donkey and I kick my legs. Can you do it? I can do it!",
+  "I am an elephant and I stomp my foot. Can you do it? I can do it!",
+];
+
+function loadPeterRabbit() {
+  document.getElementById('bookTitle').value = "The Tale of Peter Rabbit";
+  document.getElementById('pagesContainer').innerHTML = "";
+  PETER_RABBIT_PAGES.forEach(p => addPage(p));
+}
+
+function loadFromHeadToToe() {
+  document.getElementById('bookTitle').value = "From Head to Toe";
+  document.getElementById('pagesContainer').innerHTML = "";
+  FROM_HEAD_TO_TOE_PAGES.forEach(p => addPage(p));
+}
+
+// ── Analyse ────────────────────────────────────────────────────────────────
+async function analyseBook() {
+  const title = document.getElementById('bookTitle').value.trim();
+  const pages = getPages();
+  
+  if (!title) return showStatus('statusBox', 'Please enter a book title.', 'error');
+  if (pages.length === 0) return showStatus('statusBox', 'Please add at least one page.', 'error');
+  
+  showStatus('statusBox', `Analysing ${pages.length} pages with Ollama... this may take a minute.`, 'info');
+  
+  try {
+    const res = await fetch(`${API}/analyse`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, pages })
+    });
+    
+    if (!res.ok) throw new Error(await res.text());
+    bookData = await res.json();
+    
+    showStatus('statusBox', `✓ Analysis complete — ${bookData.pages.length} pages profiled.`, 'success');
+    document.getElementById('generateSection').style.display = 'block';
+  } catch (e) {
+    showStatus('statusBox', `Error: ${e.message}`, 'error');
+  }
+}
+
+// ── Generate ───────────────────────────────────────────────────────────────
+async function generateAudio() {
+  if (!bookData) return;
+  
+  showStatus('genStatusBox', 'Generation started (runs in background). This may take several minutes on CPU.', 'info');
+  
+  try {
+    const slug = bookData.title.toLowerCase().replace(/ /g, '_');
+    await fetch(`${API}/generate/${encodeURIComponent(bookData.title)}`, { method: 'POST' });
+    
+    // Poll status
+    const poll = setInterval(async () => {
+      const res = await fetch(`${API}/status/${encodeURIComponent(bookData.title)}`);
+      const data = await res.json();
+      
+      if (data.status === 'complete') {
+        clearInterval(poll);
+        // Reload book data with audio URLs
+        const bookRes = await fetch(`${API}/book/${encodeURIComponent(bookData.title)}`);
+        bookData = await bookRes.json();
+        showStatus('genStatusBox', '✓ Audio generation complete! Open the reader.', 'success');
+        document.getElementById('readerTab').style.fontWeight = 'bold';
+      } else if (data.status.startsWith('error')) {
+        clearInterval(poll);
+        showStatus('genStatusBox', `Error: ${data.status}`, 'error');
+      } else {
+        showStatus('genStatusBox', `Status: ${data.status}...`, 'info');
+      }
+    }, 10000); // poll every 10s
+    
+  } catch(e) {
+    showStatus('genStatusBox', `Error: ${e.message}`, 'error');
+  }
+}
+
+// ── Reader ─────────────────────────────────────────────────────────────────
+function openReader() {
+  if (!bookData) return;
+  currentPage = 0;
+  renderPage();
+  
+  // Switch to reader tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('readerPanel').classList.add('active');
+  document.querySelectorAll('.tab')[1].classList.add('active');
+}
+
+function renderPage() {
+  if (!bookData) return;
+  const page = bookData.pages[currentPage];
+  const total = bookData.pages.length;
+  
+  document.getElementById('readerTitle').textContent = bookData.title;
+  document.getElementById('pageCounter').textContent = `Page ${currentPage + 1} of ${total}`;
+  document.getElementById('pageText').textContent = page.text;
+  document.getElementById('moodTag').textContent = `${moodEmoji(page.energy)} ${page.mood}`;
+  document.getElementById('trackName').textContent = page.instrumentation;
+  document.getElementById('trackDesc').textContent = page.music_prompt.slice(0, 80) + '...';
+  
+  document.getElementById('prevBtn').disabled = currentPage === 0;
+  document.getElementById('nextBtn').disabled = currentPage === total - 1;
+  
+  // Audio
+  const player = document.getElementById('audioPlayer');
+  const statusEl = document.getElementById('musicStatus');
+  
+  const toggleBtn = document.getElementById('musicToggle');
+  if (page.audio_url) {
+    player.loop = true;
+    player.src = API + page.audio_url;
+    player.play();
+    statusEl.textContent = '▶ playing';
+    statusEl.className = 'music-status playing';
+    toggleBtn.textContent = '⏸';
+    toggleBtn.disabled = false;
+  } else {
+    player.pause();
+    player.src = '';
+    statusEl.textContent = 'no audio';
+    statusEl.className = 'music-status';
+    toggleBtn.textContent = '▶';
+    toggleBtn.disabled = true;
+  }
+  
+  resetTimer();
+}
+
+function toggleMusic() {
+  const player = document.getElementById('audioPlayer');
+  const statusEl = document.getElementById('musicStatus');
+  const toggleBtn = document.getElementById('musicToggle');
+  if (player.paused) {
+    player.play();
+    statusEl.textContent = '▶ playing';
+    statusEl.className = 'music-status playing';
+    toggleBtn.textContent = '⏸';
+  } else {
+    player.pause();
+    statusEl.textContent = '⏸ paused';
+    statusEl.className = 'music-status';
+    toggleBtn.textContent = '▶';
+  }
+}
+
+function moodEmoji(energy) {
+  return { low: '🌙', medium: '🌤', high: '☀️' }[energy] || '🎵';
+}
+
+function restartBook() {
+  currentPage = 0;
+  renderPage();
+}
+
+function goPage(dir) {
+  currentPage = Math.max(0, Math.min(bookData.pages.length - 1, currentPage + dir));
+  renderPage();
+}
+
+// ── Auto-advance timer ─────────────────────────────────────────────────────
+function resetTimer() {
+  clearInterval(timerInterval);
+  timerSeconds = 0;
+  document.getElementById('timerFill').style.width = '0%';
+  
+  timerMax = parseInt(document.getElementById('timerSelect').value);
+  if (timerMax === 0) return;
+  
+  timerInterval = setInterval(() => {
+    timerSeconds++;
+    const pct = (timerSeconds / timerMax) * 100;
+    document.getElementById('timerFill').style.width = pct + '%';
+    
+    if (timerSeconds >= timerMax) {
+      if (currentPage < bookData.pages.length - 1) {
+        goPage(1);
+      } else {
+        clearInterval(timerInterval); // end of book
+      }
+    }
+  }, 1000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+addPage(); // start with one empty page
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# StoryScore — Python dependencies
+# Requires Python 3.9+
+
+# API
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+
+# Ollama communication
+requests>=2.31.0
+
+# MusicGen via HuggingFace transformers
+transformers>=4.40.0
+torch>=2.2.0
+torchaudio>=2.2.0
+soundfile>=0.12.1
+scipy>=1.13.0
+
+# Optimisation (optional but speeds up model loading)
+accelerate>=0.29.0
