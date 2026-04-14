@@ -8,6 +8,7 @@ Run:  uvicorn api:app --reload --port 8000
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import List, Optional
 
@@ -18,7 +19,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from analyser import analyse_book, save_profile, load_profile, BookProfile
-from generator import generate_book_audio, OUTPUT_DIR
+from generator import generate_book_audio, regenerate_page, OUTPUT_DIR
 
 app = FastAPI(title="StoryScore API", version="1.0")
 
@@ -88,11 +89,11 @@ def book_to_response(profile: BookProfile) -> BookResponse:
 
 # ── Background task ───────────────────────────────────────────────────────────
 
-def run_generation(profile: BookProfile):
+def run_generation(profile: BookProfile, force_regenerate: bool = False):
     title = profile.title
     generation_status[title] = "generating"
     try:
-        generate_book_audio(profile)
+        generate_book_audio(profile, force_regenerate=force_regenerate)
         generation_status[title] = "complete"
     except Exception as e:
         generation_status[title] = f"error: {str(e)}"
@@ -104,33 +105,42 @@ def root():
     return FileResponse("index.html")
 
 @app.post("/analyse", response_model=BookResponse)
-def analyse(book: BookInput):
-    """Analyse a book and return mood profiles for each page."""
+def analyse(book: BookInput, force: bool = False):
+    """Analyse a book and return mood profiles for each page.
+
+    If a profile already exists and ?force=true is not set, the cached profile
+    is returned immediately without calling Ollama.
+    """
     try:
-        profile = analyse_book(book.title, book.pages)
+        profile = analyse_book(book.title, book.pages, force_reanalyse=force)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
-    
+
     os.makedirs("output", exist_ok=True)
     save_profile(profile, str(profile_path(book.title)))
     generation_status[book.title] = "analysed"
-    
+
     return book_to_response(profile)
 
 @app.post("/generate/{title}")
-def generate(title: str, background_tasks: BackgroundTasks):
-    """Trigger audio generation for a previously analysed book."""
+def generate(title: str, background_tasks: BackgroundTasks, force_regenerate: bool = False):
+    """Trigger audio generation for a previously analysed book.
+
+    By default, pages that already have a .wav file are skipped.
+    Pass force_regenerate=true to overwrite all existing audio.
+    """
     path = profile_path(title)
     if not path.exists():
         raise HTTPException(status_code=404, detail="Book not analysed yet. Run /analyse first.")
-    
-    if generation_status.get(title) == "generating":
-        return {"status": "already generating", "title": title}
-    
+
     profile = load_profile(str(path))
-    background_tasks.add_task(run_generation, profile)
-    generation_status[title] = "generating"
-    
+
+    if generation_status.get(profile.title) == "generating":
+        return {"status": "already generating", "title": title}
+
+    background_tasks.add_task(run_generation, profile, force_regenerate)
+    generation_status[profile.title] = "generating"
+
     return {"status": "generation started", "title": title}
 
 @app.get("/status/{title}")
@@ -153,13 +163,83 @@ def get_book(title: str):
 
 @app.get("/books")
 def list_books():
-    """List all analysed books."""
+    """List all analysed books with profile and audio status."""
     output = Path("output")
     books = []
-    for f in output.glob("*_profile.json"):
-        title_slug = f.stem.replace("_profile", "")
+    for f in sorted(output.glob("*_profile.json")):
+        slug = f.stem.replace("_profile", "")
+        try:
+            profile = load_profile(str(f))
+        except Exception:
+            continue
+
+        page_count = len(profile.pages)
+        audio_dir = OUTPUT_DIR / slug
+        audio_pages = len(list(audio_dir.glob("page_*.wav"))) if audio_dir.exists() else 0
+
+        # Prefer in-memory status (accurate during active generation); fall back to file state
+        mem_status = generation_status.get(profile.title)
+        if mem_status:
+            status = mem_status
+        elif audio_pages == 0:
+            status = "analysed"
+        elif audio_pages < page_count:
+            status = "partial"
+        else:
+            status = "complete"
+
         books.append({
-            "slug": title_slug,
-            "status": generation_status.get(title_slug.replace("_", " ").title(), "unknown")
+            "title": profile.title,
+            "slug": slug,
+            "page_count": page_count,
+            "audio_pages": audio_pages,
+            "status": status,
         })
     return {"books": books}
+
+
+@app.delete("/book/{title}/profile")
+def delete_profile(title: str):
+    """Delete the analysis profile for a book (forces re-analyse on next request)."""
+    path = profile_path(title)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Profile not found.")
+    # Load to get the real title so we can clear the correct status key
+    try:
+        profile = load_profile(str(path))
+        generation_status.pop(profile.title, None)
+    except Exception:
+        pass
+    path.unlink()
+    generation_status.pop(title, None)
+    return {"deleted": str(path)}
+
+
+@app.delete("/book/{title}/audio")
+def delete_audio(title: str):
+    """Delete all generated audio for a book."""
+    slug = title.lower().replace(" ", "_")
+    audio_dir = OUTPUT_DIR / slug
+    if audio_dir.exists():
+        shutil.rmtree(audio_dir)
+    # Clear status so generation can be restarted
+    try:
+        path = profile_path(title)
+        if path.exists():
+            profile = load_profile(str(path))
+            generation_status.pop(profile.title, None)
+    except Exception:
+        pass
+    generation_status.pop(title, None)
+    return {"deleted": str(audio_dir)}
+
+
+@app.delete("/book/{title}/audio/{page_num}")
+def delete_page_audio(title: str, page_num: int):
+    """Delete the audio file for a single page."""
+    slug = title.lower().replace(" ", "_")
+    wav = OUTPUT_DIR / slug / f"page_{page_num:02d}.wav"
+    if not wav.exists():
+        raise HTTPException(status_code=404, detail=f"Audio for page {page_num} not found.")
+    wav.unlink()
+    return {"deleted": str(wav)}

@@ -282,6 +282,46 @@
     }
 
     audio { display: none; }
+
+    /* ── Library panel ── */
+    .book-card {
+      background: #fffdf8;
+      border: 1.5px solid #ddc9a8;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 12px;
+    }
+    .book-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .book-card-title {
+      font-size: 1.05rem;
+      color: #3a2e1e;
+    }
+    .status-badge {
+      font-family: sans-serif;
+      font-size: 0.78rem;
+      padding: 3px 10px;
+      border-radius: 12px;
+      background: #f0e0c8;
+      color: #7a5c3a;
+    }
+    .status-badge.complete { background: #d8f0d8; color: #2a6a2a; }
+    .status-badge.partial  { background: #fdf3d8; color: #8a6a00; }
+    .status-badge.generating { background: #fdf3d8; color: #8a6a00; }
+    .btn-sm { padding: 7px 14px; font-size: 0.85rem; }
+    .btn-danger { background: #8b3a2e; color: #fff; }
+    .library-empty {
+      font-family: sans-serif;
+      color: #a07850;
+      text-align: center;
+      padding: 48px 0;
+    }
   </style>
 </head>
 <body>
@@ -292,8 +332,9 @@
 </header>
 
 <div class="tabs">
-  <button class="tab active" onclick="showTab('setup')">📝 Setup</button>
-  <button class="tab" onclick="showTab('reader')" id="readerTab">📖 Read</button>
+  <button class="tab active" data-tab="setup" onclick="showTab('setup')">📝 Setup</button>
+  <button class="tab" data-tab="reader" onclick="showTab('reader')" id="readerTab">📖 Read</button>
+  <button class="tab" data-tab="library" onclick="showTab('library')">📚 Library</button>
 </div>
 
 <!-- ── SETUP PANEL ── -->
@@ -349,6 +390,7 @@
       <div class="track-desc" id="trackDesc">—</div>
     </div>
     <button class="music-toggle" id="musicToggle" onclick="toggleMusic()" title="Play / Pause">▶</button>
+    <button class="music-toggle" id="regenPageBtn" onclick="regeneratePage()" title="Regenerate audio for this page" style="font-size:0.9rem;">↺</button>
     <span class="music-status" id="musicStatus">–</span>
   </div>
 
@@ -363,13 +405,27 @@
   <div class="timer-row">
     <label>Auto-advance:</label>
     <select id="timerSelect" onchange="resetTimer()">
-      <option value="0">Off</option>
+      <option value="0" selected>Off</option>
+      <option value="15">15s</option>
       <option value="20">20s</option>
-      <option value="30" selected>30s</option>
+      <option value="30">30s</option>
       <option value="45">45s</option>
       <option value="60">60s</option>
     </select>
     <div class="timer-progress"><div class="timer-fill" id="timerFill"></div></div>
+  </div>
+
+</div>
+
+<!-- ── LIBRARY PANEL ── -->
+<div class="panel" id="libraryPanel">
+
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h2 style="font-size:1.2rem; color:#5c3d2e; font-weight:normal;">Book Library</h2>
+    <button class="btn btn-outline btn-sm" onclick="loadLibrary()">↻ Refresh</button>
+  </div>
+  <div id="libraryList">
+    <p class="library-empty">Loading library...</p>
   </div>
 
 </div>
@@ -382,14 +438,16 @@ let bookData = null;   // full API response
 let currentPage = 0;
 let timerInterval = null;
 let timerSeconds = 0;
-let timerMax = 30;
+let timerMax = 0;
+let isPaused = false;
 
 // ── Tab switching ──────────────────────────────────────────────────────────
 function showTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById(name + 'Panel').classList.add('active');
-  event.target.classList.add('active');
+  document.querySelector(`.tab[data-tab="${name}"]`).classList.add('active');
+  if (name === 'library') loadLibrary();
 }
 
 // ── Page inputs ────────────────────────────────────────────────────────────
@@ -483,9 +541,9 @@ async function analyseBook() {
   if (pages.length === 0) return showStatus('statusBox', 'Please add at least one page.', 'error');
   
   showStatus('statusBox', `Analysing ${pages.length} pages with Ollama... this may take a minute.`, 'info');
-  
+
   try {
-    const res = await fetch(`${API}/analyse`, {
+    const res = await fetch(`${API}/analyse?force=true`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title, pages })
@@ -541,12 +599,7 @@ function openReader() {
   if (!bookData) return;
   currentPage = 0;
   renderPage();
-  
-  // Switch to reader tab
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.getElementById('readerPanel').classList.add('active');
-  document.querySelectorAll('.tab')[1].classList.add('active');
+  showTab('reader');
 }
 
 function renderPage() {
@@ -598,11 +651,13 @@ function toggleMusic() {
     statusEl.textContent = '▶ playing';
     statusEl.className = 'music-status playing';
     toggleBtn.textContent = '⏸';
+    isPaused = false;
   } else {
     player.pause();
     statusEl.textContent = '⏸ paused';
     statusEl.className = 'music-status';
     toggleBtn.textContent = '▶';
+    isPaused = true;
   }
 }
 
@@ -611,11 +666,13 @@ function moodEmoji(energy) {
 }
 
 function restartBook() {
+  isPaused = false;
   currentPage = 0;
   renderPage();
 }
 
 function goPage(dir) {
+  isPaused = false;
   currentPage = Math.max(0, Math.min(bookData.pages.length - 1, currentPage + dir));
   renderPage();
 }
@@ -623,28 +680,175 @@ function goPage(dir) {
 // ── Auto-advance timer ─────────────────────────────────────────────────────
 function resetTimer() {
   clearInterval(timerInterval);
+  timerInterval = null;
   timerSeconds = 0;
   document.getElementById('timerFill').style.width = '0%';
-  
   timerMax = parseInt(document.getElementById('timerSelect').value);
   if (timerMax === 0) return;
-  
+
   timerInterval = setInterval(() => {
+    if (isPaused) return; // freeze tick when paused — no advance, no progress
     timerSeconds++;
     const pct = (timerSeconds / timerMax) * 100;
     document.getElementById('timerFill').style.width = pct + '%';
-    
     if (timerSeconds >= timerMax) {
       if (currentPage < bookData.pages.length - 1) {
         goPage(1);
       } else {
-        clearInterval(timerInterval); // end of book
+        clearInterval(timerInterval);
+        timerInterval = null;
       }
     }
   }, 1000);
 }
 
+// ── Regenerate single page ─────────────────────────────────────────────────
+async function regeneratePage() {
+  if (!bookData) return;
+  const page = bookData.pages[currentPage];
+  const pageNum = page.page;
+  const slug = bookData.title.toLowerCase().replace(/ /g, '_');
+
+  if (!confirm(`Regenerate audio for page ${pageNum}?\n\nThis will replace the current audio track for this page.`)) return;
+
+  const regenBtn = document.getElementById('regenPageBtn');
+  regenBtn.disabled = true;
+  regenBtn.textContent = '⟳';
+
+  try {
+    // Remove the existing wav so the generator picks it up as missing
+    await fetch(`${API}/book/${encodeURIComponent(slug)}/audio/${pageNum}`, { method: 'DELETE' });
+
+    // Start generation — skip logic means only the deleted page is regenerated
+    await fetch(`${API}/generate/${encodeURIComponent(bookData.title)}`, { method: 'POST' });
+
+    // Poll until done
+    const poll = setInterval(async () => {
+      const res = await fetch(`${API}/status/${encodeURIComponent(bookData.title)}`);
+      const data = await res.json();
+      if (data.status === 'complete') {
+        clearInterval(poll);
+        const bookRes = await fetch(`${API}/book/${encodeURIComponent(bookData.title)}`);
+        bookData = await bookRes.json();
+        renderPage();
+        regenBtn.disabled = false;
+        regenBtn.textContent = '↺';
+      } else if (data.status.startsWith('error')) {
+        clearInterval(poll);
+        alert(`Generation error: ${data.status}`);
+        regenBtn.disabled = false;
+        regenBtn.textContent = '↺';
+      }
+    }, 5000);
+  } catch (e) {
+    alert(`Error: ${e.message}`);
+    regenBtn.disabled = false;
+    regenBtn.textContent = '↺';
+  }
+}
+
+// ── Library ────────────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escJs(str) {
+  return String(str).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+async function loadLibrary() {
+  const list = document.getElementById('libraryList');
+  list.innerHTML = '<p class="library-empty">Loading...</p>';
+
+  try {
+    const res = await fetch(`${API}/books`);
+    const data = await res.json();
+
+    if (!data.books.length) {
+      list.innerHTML = '<p class="library-empty">No books analysed yet.<br>Go to Setup to add a book.</p>';
+      return;
+    }
+
+    list.innerHTML = data.books.map(book => {
+      const statusClass = book.status === 'complete' ? 'complete'
+                        : (book.status === 'partial' || book.status === 'generating') ? 'partial'
+                        : '';
+      const statusText = book.status === 'complete'
+        ? `● Complete (${book.audio_pages}/${book.page_count} pages)`
+        : book.status === 'partial'
+        ? `◐ Partial audio (${book.audio_pages}/${book.page_count} pages)`
+        : book.status === 'generating'
+        ? `⟳ Generating...`
+        : `● Analysed — no audio yet`;
+
+      const isGenerating = book.status === 'generating';
+
+      return `
+        <div class="book-card">
+          <div class="book-card-header">
+            <span class="book-card-title">${escHtml(book.title)}</span>
+            <span class="status-badge ${statusClass}">${statusText}</span>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-primary btn-sm"
+              onclick="openBookFromLibrary('${escJs(book.slug)}')">Open Reader</button>
+            <button class="btn btn-outline btn-sm"
+              onclick="clearProfile('${escJs(book.title)}', '${escJs(book.slug)}')">Clear Profile</button>
+            <button class="btn btn-outline btn-sm" ${isGenerating ? 'disabled' : ''}
+              onclick="regenerateAudio('${escJs(book.title)}', '${escJs(book.slug)}', ${book.page_count})">Regenerate Audio</button>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = `<p class="library-empty" style="color:#8a2c2c;">Error loading library: ${escHtml(e.message)}</p>`;
+  }
+}
+
+async function openBookFromLibrary(slug) {
+  try {
+    const res = await fetch(`${API}/book/${encodeURIComponent(slug)}`);
+    if (!res.ok) throw new Error('Book not found');
+    bookData = await res.json();
+    currentPage = 0;
+    renderPage();
+    showTab('reader');
+  } catch (e) {
+    alert(`Could not open book: ${e.message}`);
+  }
+}
+
+async function clearProfile(title, slug) {
+  if (!confirm(`Clear the analysis profile for "${title}"?\n\nThis removes the mood profile. You can re-analyse from the Setup tab.`)) return;
+  try {
+    const res = await fetch(`${API}/book/${encodeURIComponent(slug)}/profile`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+    await loadLibrary();
+  } catch (e) {
+    alert(`Error: ${e.message}`);
+  }
+}
+
+async function regenerateAudio(title, slug, pageCount) {
+  if (!confirm(`Delete all audio for "${title}" and regenerate?\n\nThis will remove all ${pageCount} audio files and re-generate them. This may take several minutes on CPU.`)) return;
+  try {
+    await fetch(`${API}/book/${encodeURIComponent(slug)}/audio`, { method: 'DELETE' });
+    await fetch(`${API}/generate/${encodeURIComponent(title)}`, { method: 'POST' });
+    await loadLibrary(); // show "generating" status
+
+    const poll = setInterval(async () => {
+      const res = await fetch(`${API}/status/${encodeURIComponent(title)}`);
+      const data = await res.json();
+      if (data.status === 'complete' || data.status.startsWith('error')) {
+        clearInterval(poll);
+        await loadLibrary();
+      }
+    }, 10000);
+  } catch (e) {
+    alert(`Error: ${e.message}`);
+  }
+}
+
 // ── Init ───────────────────────────────────────────────────────────────────
+document.getElementById('timerSelect').value = '0'; // never restore cached timer value
 addPage(); // start with one empty page
 </script>
 </body>

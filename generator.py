@@ -99,8 +99,12 @@ def generate_clip(prompt: str, output_path: Path) -> Path:
 
     return output_path
 
-def generate_book_audio(book_profile: BookProfile, output_dir: Path = OUTPUT_DIR):
-    """Generate one audio clip per page for an entire book."""
+def generate_book_audio(book_profile: BookProfile, output_dir: Path = OUTPUT_DIR, force_regenerate: bool = False):
+    """Generate one audio clip per page for an entire book.
+
+    If force_regenerate is False (default), pages that already have a .wav file
+    are skipped — only missing clips are generated.
+    """
     book_dir = output_dir / book_profile.title.lower().replace(" ", "_")
     book_dir.mkdir(parents=True, exist_ok=True)
 
@@ -117,6 +121,13 @@ def generate_book_audio(book_profile: BookProfile, output_dir: Path = OUTPUT_DIR
     generated = []
     for page in book_profile.pages:
         clip_path = book_dir / f"page_{page.page:02d}"
+        wav_path = clip_path.with_suffix(".wav")
+
+        if not force_regenerate and wav_path.exists():
+            print(f"  Page {page.page:2d} | skipping (already exists)")
+            generated.append(str(wav_path))
+            continue
+
         print(f"  Page {page.page:2d} | {page.mood}")
         print(f"          Prompt: {page.music_prompt[:70]}...")
 
@@ -127,6 +138,23 @@ def generate_book_audio(book_profile: BookProfile, output_dir: Path = OUTPUT_DIR
     print(f"✅ Audio generation complete.")
     print(f"   Files saved to: {book_dir}")
     return generated
+
+
+def regenerate_page(profile: BookProfile, page_num: int, output_dir: Path = OUTPUT_DIR):
+    """Regenerate audio for a single page, overwriting any existing file."""
+    slug = profile.title.lower().replace(" ", "_")
+    page_dir = output_dir / slug
+    page_dir.mkdir(parents=True, exist_ok=True)
+
+    page = next((p for p in profile.pages if p.page == page_num), None)
+    if page is None:
+        raise ValueError(f"Page {page_num} not found in profile for '{profile.title}'")
+
+    clip_path = page_dir / f"page_{page_num:02d}"
+    print(f"  ↺ Regenerating page {page_num} | {page.mood}")
+    output = generate_clip(page.music_prompt, clip_path)
+    print(f"    ✓ Saved: {output.name}")
+    return str(output)
 
 # ── CLI entrypoint ────────────────────────────────────────────────────────────
 

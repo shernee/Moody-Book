@@ -12,6 +12,7 @@ import os
 import re
 import requests
 from dataclasses import dataclass, asdict
+from pathlib import Path
 from typing import List
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
@@ -126,8 +127,17 @@ def analyse_page(page_num: int, text: str, retries: int = 3) -> PageProfile:
 
     raise ValueError(f"Failed to analyse page {page_num} after {retries} attempts: {last_error}")
 
-def analyse_book(title: str, pages: List[str]) -> BookProfile:
-    """Analyse all pages of a book and return a BookProfile."""
+def analyse_book(title: str, pages: List[str], force_reanalyse: bool = False) -> BookProfile:
+    """Analyse all pages of a book and return a BookProfile.
+
+    If a saved profile already exists and force_reanalyse is False, the cached
+    profile is loaded and returned immediately without calling Ollama.
+    """
+    output_path = Path("output") / f"{title.lower().replace(' ', '_')}_profile.json"
+    if not force_reanalyse and output_path.exists():
+        print(f"\n📖 Loading cached profile for: {title}")
+        return load_profile(output_path)
+
     print(f"\n📖 Analysing: {title}")
     print(f"   {len(pages)} pages to process\n")
     
